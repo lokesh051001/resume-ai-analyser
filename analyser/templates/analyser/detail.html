@@ -1,0 +1,12 @@
+<h1>{{ a.filename }}: {{ a.score }}/100</h1>
+<h3>Breakdown</h3>
+<ul>
+  {% for name, value in a.result.breakdown.items %}
+    <li>{{ name }}: {{ value }}</li>
+  {% endfor %}
+</ul>
+<p><b>Required skills missing:</b> {{ a.result.required_missing|join:", "|default:"none" }}</p>
+<p><b>Preferred skills missing:</b> {{ a.result.preferred_missing|join:", "|default:"none" }}</p>
+<p><b>Listed but not demonstrated:</b> {{ a.result.not_demonstrated|join:", "|default:"none" }}</p>
+<p><a href="{% url 'report' a.pk %}">Download report</a></p>
+<a href="{% url 'history' %}">Back to history</a>

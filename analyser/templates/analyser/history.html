@@ -1,0 +1,9 @@
+<h1>History</h1>
+<ul>
+  {% for a in analyses %}
+    <li><a href="{% url 'detail' a.pk %}">{{ a.filename }}</a>: {{ a.score }} ({{ a.created_at }})</li>
+  {% empty %}
+    <li>No analyses yet.</li>
+  {% endfor %}
+</ul>
+<a href="{% url 'upload' %}">New analysis</a>
