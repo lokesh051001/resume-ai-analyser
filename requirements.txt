@@ -3,6 +3,7 @@ cffi==2.1.1
 charset-normalizer==3.5.2
 cryptography==50.0.2
 Django==5.2.18
+django-cors-headers==4.9.0
 pdfminer.six==20260107
 pdfplumber==0.11.10
 pillow==12.3.0
