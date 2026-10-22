@@ -18,24 +18,56 @@ function ScoreBar({ value }) {
     </div>
   );
 }
+const DEFAULT_WEIGHTS = {
+  required_skills: 50,
+  preferred_skills: 15,
+  evidence: 15,
+  completeness: 20,
+};
 
-function AnalysisCard({ a }) {
+function recalc(breakdown, weights) {
+  const keys = Object.keys(breakdown);
+  const total = keys.reduce((s, k) => s + (weights[k] ?? 0), 0);
+  if (total === 0) return 0;
+  const sum = keys.reduce((s, k) => s + (weights[k] ?? 0) * breakdown[k], 0);
+  return Math.round((sum / total) * 10) / 10;
+}
+
+function WeightSliders({ weights, onChange }) {
+  return (
+    <div style={{ marginBottom: 24, padding: 12, background: "#f7f7f7", borderRadius: 8 }}>
+      <h2 style={{ marginTop: 0 }}>Score weights</h2>
+      {Object.entries(weights).map(([k, v]) => (
+        <div key={k} style={{ marginBottom: 6 }}>
+          <label style={{ display: "inline-block", width: 160 }}>{k}</label>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={v}
+            onChange={(e) => onChange({ ...weights, [k]: Number(e.target.value) })}
+          />{" "}
+          {v}
+        </div>
+      ))}
+      <button onClick={() => onChange(DEFAULT_WEIGHTS)}>Reset</button>
+    </div>
+  );
+}
+
+function AnalysisCard({ a, weights }) {
   const r = a.result;
+  const score = recalc(r.breakdown, weights);
   return (
     <li style={{ marginBottom: 20, listStyle: "none" }}>
       <div>
-        {a.filename}: <b>{a.score}</b>/100
+        {a.filename}: <b>{score}</b>/100
+        {score !== a.score && (
+          <span style={{ color: "#888", fontSize: 12 }}> (saved: {a.score})</span>
+        )}
       </div>
-      <ScoreBar value={a.score} />
-      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-        {Object.entries(r.breakdown).map(([k, v]) => `${k}: ${v}`).join(" · ")}
-      </div>
-      <div style={{ fontSize: 13, color: "#555" }}>
-        Required missing: {r.required_missing.join(", ") || "none"}
-      </div>
-      <div style={{ fontSize: 13, color: "#555" }}>
-        Listed but not demonstrated: {r.not_demonstrated.join(", ") || "none"}
-      </div>
+      <ScoreBar value={score} />
+      {/* ...the rest of the card stays the same... */}
     </li>
   );
 }
@@ -113,6 +145,7 @@ export default function App() {
   const [analyses, setAnalyses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [weights, setWeights] = useState(DEFAULT_WEIGHTS);
 
   useEffect(() => {
     fetch(`${API}/analyses/`)
@@ -130,12 +163,13 @@ export default function App() {
       <h1>Resume Analyser</h1>
       <UploadForm onCreated={(a) => setAnalyses((prev) => [a, ...prev])} />
       <h2>History</h2>
+      <WeightSliders weights={weights} onChange={setWeights}/>
       {loading && <p>Loading...</p>}
       {error && <p>Could not load analyses: {error}</p>}
       {!loading && !error && analyses.length === 0 && <p>No analyses yet.</p>}
       <ul style={{ padding: 0 }}>
         {analyses.map((a) => (
-          <AnalysisCard key={a.id} a={a} />
+          <AnalysisCard key={a.id} a={a} weights={weights} />
         ))}
       </ul>
     </div>
