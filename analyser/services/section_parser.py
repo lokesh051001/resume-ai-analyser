@@ -9,6 +9,8 @@ SECTION_ALIASES = {
     "projects": ["academic projects", "projects", "personal projects"],
     "certifications": ["certificates", "certifications", "courses"],
     "interests": ["interests", "hobbies"],
+    "activities": ["extracurricular activities", "extra curricular activities", "activities"],
+    "personal": ["personal details", "personal information", "personal profile"],
 }
 
 # Reverse lookup: "technical skills" -> "skills"
