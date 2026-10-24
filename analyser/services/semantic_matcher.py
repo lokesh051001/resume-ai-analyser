@@ -4,7 +4,7 @@ from functools import lru_cache
 from .section_parser import SECTION_ALIASES
 
 # Starting values, to be tuned on labelled examples.
-THRESHOLD = 0.45
+THRESHOLD = 0.40
 STRONG_THRESHOLD = 0.60
 
 # Sections whose text must never be embedded.
