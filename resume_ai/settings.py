@@ -15,6 +15,18 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Optional local .env support without adding a dependency. Existing environment
+# variables always take precedence; .env is ignored by Git.
+_env_file = BASE_DIR / ".env"
+if _env_file.exists():
+    # PowerShell may save UTF-8 files with a BOM; strip it so the first key is
+    # still read as ANTHROPIC_API_KEY rather than a key prefixed by that marker.
+    for _line in _env_file.read_text(encoding="utf-8-sig").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _value = _line.split("=", 1)
+            os.environ.setdefault(_key.strip(), _value.strip().strip("\"'"))
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -22,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-insecure-key")
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or "dev-only-insecure-key"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -132,3 +144,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 ]
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+CLAUDE_SUGGESTIONS_ENABLED = os.environ.get("CLAUDE_SUGGESTIONS_ENABLED", "false").lower() == "true"

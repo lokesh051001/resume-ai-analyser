@@ -111,12 +111,17 @@ function UploadForm({ onCreated }) {
   const [file, setFile] = useState(null);
   const [job, setJob] = useState("");
   const [twoColumn, setTwoColumn] = useState(false);
+  const [requestSuggestions, setRequestSuggestions] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [suggestionError, setSuggestionError] = useState("");
+  const [suggestions, setSuggestions] = useState(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setSuggestionError("");
+    setSuggestions(null);
     if (!file) return setError("Please choose a PDF.");
 
     const body = new FormData();
@@ -134,6 +139,20 @@ function UploadForm({ onCreated }) {
         throw new Error(messages.join(" ") || `Server returned ${res.status}`);
       }
       onCreated(data);
+      if (requestSuggestions) {
+        const suggestionBody = new FormData();
+        suggestionBody.append("resume", file);
+        suggestionBody.append("job_description", job);
+        if (twoColumn) suggestionBody.append("two_column", "true");
+        try {
+          const suggestionRes = await fetch(`${API}/suggestions/`, { method: "POST", body: suggestionBody });
+          const suggestionData = await suggestionRes.json();
+          if (!suggestionRes.ok) throw new Error(suggestionData.error || "Could not generate suggestions.");
+          setSuggestions(suggestionData);
+        } catch (err) {
+          setSuggestionError(err.message);
+        }
+      }
       setFile(null);
       e.target.reset();
     } catch (err) {
@@ -167,11 +186,41 @@ function UploadForm({ onCreated }) {
         Resume has two columns
       </label>
       <p>
+        <label>
+          <input
+            type="checkbox"
+            checked={requestSuggestions}
+            onChange={(e) => setRequestSuggestions(e.target.checked)}
+          />{" "}
+          Send relevant resume text to Claude for draft wording suggestions
+        </label>
+      </p>
+      <p style={{ color: "#666", fontSize: 13 }}>
+        Optional. Suggestions are requested only when selected. The PDF is not saved by this feature;
+        experience, project, and summary text is sent to Anthropic for this request.
+      </p>
+      <p>
         <button type="submit" disabled={busy}>
           {busy ? "Analysing..." : "Analyse"}
         </button>
       </p>
       {error && <p style={{ color: "#d9534f" }}>{error}</p>}
+      {suggestionError && <p style={{ color: "#d9534f" }}>Analysis completed. {suggestionError}</p>}
+      {suggestions && (
+        <section style={{ background: "#f7f7f7", padding: 16, borderRadius: 8 }}>
+          <h3>Draft suggestions</h3>
+          <p>{suggestions.draft_notice}</p>
+          {suggestions.suggestions.length === 0 && <p>No wording suggestions were returned.</p>}
+          {suggestions.suggestions.map((item, i) => (
+            <article key={i} style={{ marginBottom: 16 }}>
+              <p><b>Original:</b> {item.original}</p>
+              <p><b>Draft:</b> {item.suggested_rewrite}</p>
+              <p><b>Why:</b> {item.reason}</p>
+              {item.question && <p><b>Question for you:</b> {item.question}</p>}
+            </article>
+          ))}
+        </section>
+      )}
     </form>
   );
 }
