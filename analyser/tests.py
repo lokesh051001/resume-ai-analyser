@@ -178,3 +178,8 @@ class SuggestionViewTests(TestCase):
     def test_non_pdf_returns_400(self):
         response = self.post(filename="notes.txt")
         self.assertEqual(response.status_code, 400)
+
+    def test_invalid_upload_does_not_use_rate_limit(self):
+        for _ in range(6):
+            self.assertEqual(self.post(filename="notes.txt").status_code, 400)
+        self.assertEqual(self.post().status_code, 200)    
