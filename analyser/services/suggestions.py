@@ -6,6 +6,13 @@ import urllib.request
 
 from django.conf import settings
 
+from .skill_matcher import find_skills
+
+NUMBER_PATTERN = r"\d+(?:[.,]\d+)?%?"
+EXPECTED_KEYS = {"original", "suggested_rewrite", "reason", "question"}
+FORMAT_ERROR = "Claude returned an unexpected response format."
+DETAILS_ERROR = "Claude returned a rewrite with unsupported details."
+
 
 class SuggestionError(Exception):
     pass
@@ -13,26 +20,36 @@ class SuggestionError(Exception):
 
 def _validate(payload, source_lines):
     if not isinstance(payload, dict) or set(payload) != {"suggestions"}:
-        raise SuggestionError("Claude returned an unexpected response format.")
+        raise SuggestionError(FORMAT_ERROR)
     suggestions = payload["suggestions"]
     if not isinstance(suggestions, list) or len(suggestions) > 5:
-        raise SuggestionError("Claude returned an unexpected response format.")
+        raise SuggestionError(FORMAT_ERROR)
+
     validated = []
     for item in suggestions:
-        if not isinstance(item, dict) or set(item) != {"original", "suggested_rewrite", "reason", "question"}:
-            raise SuggestionError("Claude returned an unexpected response format.")
+        if not isinstance(item, dict) or set(item) != EXPECTED_KEYS:
+            raise SuggestionError(FORMAT_ERROR)
+        if not all(isinstance(item[k], str) for k in item):
+            raise SuggestionError(FORMAT_ERROR)
+
         original = item["original"]
         rewrite = item["suggested_rewrite"]
-        if not all(isinstance(item[k], str) for k in item):
-            raise SuggestionError("Claude returned an unexpected response format.")
+
         if original.strip() not in source_lines:
             raise SuggestionError("Claude returned a suggestion that did not match the supplied resume text.")
+        if not rewrite.strip():
+            raise SuggestionError(DETAILS_ERROR)
+
         # Reject new numeric claims. This catches invented metrics and dates.
-        original_numbers = set(re.findall(r"\d+(?:[.,]\d+)?%?", original))
-        rewrite_numbers = set(re.findall(r"\d+(?:[.,]\d+)?%?", rewrite))
-        if not rewrite.strip() or not rewrite_numbers.issubset(original_numbers):
-            raise SuggestionError("Claude returned a rewrite with unsupported details.")
+        if not set(re.findall(NUMBER_PATTERN, rewrite)) <= set(re.findall(NUMBER_PATTERN, original)):
+            raise SuggestionError(DETAILS_ERROR)
+
+        # Reject technologies the original line didn't mention (vocabulary-based, so a partial guard).
+        if not find_skills(rewrite) <= find_skills(original):
+            raise SuggestionError(DETAILS_ERROR)
+
         validated.append({k: item[k].strip() for k in ("original", "suggested_rewrite", "reason", "question")})
+
     return {"suggestions": validated, "draft_notice": "AI-generated drafts. Review every detail before using."}
 
 
@@ -76,26 +93,32 @@ def create_suggestions(sections, missing, not_demonstrated):
             "anthropic-version": "2023-06-01",
         },
     )
+
     try:
         with urllib.request.urlopen(request, timeout=35) as response:
             response_data = json.loads(response.read().decode("utf-8"))
-        text = "".join(block.get("text", "") for block in response_data.get("content", []) if block.get("type") == "text")
+        text = "".join(
+            block.get("text", "")
+            for block in response_data.get("content", [])
+            if block.get("type") == "text"
+        ).strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
         result = json.loads(text)
         return _validate(result, set(source_lines))
     except SuggestionError:
         raise
     except urllib.error.HTTPError as error:
-        # Do not return the provider's raw response: keep diagnostics useful
-        # without exposing request details or any resume content.
+        # Keep diagnostics useful without exposing the key or any resume content.
         try:
             provider_error = json.loads(error.read().decode("utf-8"))
             detail = provider_error.get("error", {}).get("message", "")
             if not isinstance(detail, str):
                 detail = ""
             detail = " ".join(detail.split())
-            if settings.ANTHROPIC_API_KEY:
-                detail = detail.replace(settings.ANTHROPIC_API_KEY, "[redacted]")
-            detail = detail.replace(source, "[resume text redacted]") if source else detail
+            detail = detail.replace(settings.ANTHROPIC_API_KEY, "[redacted]")
+            for line in source_lines:
+                detail = detail.replace(" ".join(line.split()), "[resume text redacted]")
             detail = detail[:240]
         except (json.JSONDecodeError, UnicodeDecodeError, AttributeError, TypeError):
             detail = ""
