@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from analyser.services.section_parser import split_sections
 
 from analyser.services.suggestions import SuggestionError, create_suggestions
 
@@ -183,3 +184,19 @@ class SuggestionViewTests(TestCase):
         for _ in range(6):
             self.assertEqual(self.post(filename="notes.txt").status_code, 400)
         self.assertEqual(self.post().status_code, 200)    
+
+    
+
+
+class SectionParserTests(TestCase):
+    def test_personal_details_are_separated(self):
+        text = (
+            "Certifications\n- Certification from Example Institute\n"
+            "Extracurricular Activities\n- College events\n"
+            "Personal Details\nFathers Name : Example Person\nAddress : Example Street"
+        )
+        sections = split_sections(text)
+        self.assertIn("personal", sections)
+        self.assertIn("Fathers Name", sections["personal"])
+        self.assertNotIn("Fathers Name", sections["certifications"])
+        self.assertNotIn("College events", sections["certifications"])    
