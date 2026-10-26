@@ -10,4 +10,5 @@ urlpatterns = [
     path("api/analyses/<int:pk>/", api.analysis_detail),
     path("api/analyse/", api.analyse),
     path("api/suggestions/", api.suggestions),
+    path("api/health/", api.health),
 ]

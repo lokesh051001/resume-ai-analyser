@@ -77,6 +77,8 @@ def score_resume(sections: dict, job_text: str, weights: dict = None) -> dict:
     return {
         "score": round(score, 1),
         "breakdown": {k: round(r * 100, 1) for k, r in active.items()},
+        "required_matched": sorted(matched_req),        # new
+        "preferred_matched": sorted(matched_pref),      # new
         "required_missing": sorted(required - resume_skills),
         "preferred_missing": sorted(preferred - resume_skills),
         "not_demonstrated": sorted(resume_skills - proof_skills),

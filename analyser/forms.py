@@ -1,5 +1,7 @@
 from django import forms
 
+MAX_UPLOAD_MB = 5
+
 
 class UploadForm(forms.Form):
     resume = forms.FileField()
@@ -10,4 +12,6 @@ class UploadForm(forms.Form):
         f = self.cleaned_data["resume"]
         if not f.name.lower().endswith(".pdf"):
             raise forms.ValidationError("Please upload a PDF file.")
+        if f.size > MAX_UPLOAD_MB * 1024 * 1024:
+            raise forms.ValidationError(f"File is too large. The limit is {MAX_UPLOAD_MB} MB.")
         return f

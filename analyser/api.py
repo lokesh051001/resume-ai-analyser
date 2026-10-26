@@ -23,7 +23,9 @@ def _serialize(a):
         "created_at": a.created_at.isoformat(),
         "result": a.result,
     }
-
+@require_GET
+def health(request):
+    return JsonResponse({"status": "ok", "message": "Resume analyser API is running"})
 
 @require_GET
 def analyses_list(request):

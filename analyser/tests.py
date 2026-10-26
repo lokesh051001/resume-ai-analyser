@@ -9,6 +9,7 @@ from django.test import TestCase, override_settings
 from analyser.services.section_parser import split_sections
 
 from analyser.services.suggestions import SuggestionError, create_suggestions
+from analyser.services.scorer import score_resume
 
 FAKE_KEY = "test-key-not-real"
 SUGGEST_URL = "/api/suggestions/"  # check analyser/urls.py
@@ -200,3 +201,28 @@ class SectionParserTests(TestCase):
         self.assertIn("Fathers Name", sections["personal"])
         self.assertNotIn("Fathers Name", sections["certifications"])
         self.assertNotIn("College events", sections["certifications"])    
+
+
+class ApiBasicsTests(TestCase):
+    def test_health(self):
+        response = self.client.get("/api/health/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+
+    def test_oversized_upload_rejected(self):
+        big = SimpleUploadedFile("big.pdf", b"0" * (5 * 1024 * 1024 + 1), content_type="application/pdf")
+        response = self.client.post("/api/analyse/", {"resume": big, "job_description": "Python"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("too large", response.json()["errors"]["resume"][0])
+
+
+@patch("analyser.services.scorer.match_requirements", return_value=[])
+class ScorerTests(TestCase):
+    def test_matched_and_missing_skills(self, _):
+        sections = {
+            "summary": "Developer", "education": "BSc",
+            "skills": "Python, SQL", "projects": "Built a tracker in Python",
+        }
+        result = score_resume(sections, "Required: Python, Django")
+        self.assertEqual(result["required_matched"], ["python"])
+        self.assertEqual(result["required_missing"], ["django"])
