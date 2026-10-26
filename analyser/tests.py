@@ -11,6 +11,11 @@ from analyser.services.section_parser import split_sections
 from analyser.services.suggestions import SuggestionError, create_suggestions
 from analyser.services.scorer import score_resume
 
+import io
+from docx import Document as WordDocument
+from analyser.services.document_parser import extract_document_text
+
+
 FAKE_KEY = "test-key-not-real"
 SUGGEST_URL = "/api/suggestions/"  # check analyser/urls.py
 
@@ -186,9 +191,6 @@ class SuggestionViewTests(TestCase):
             self.assertEqual(self.post(filename="notes.txt").status_code, 400)
         self.assertEqual(self.post().status_code, 200)    
 
-    
-
-
 class SectionParserTests(TestCase):
     def test_personal_details_are_separated(self):
         text = (
@@ -226,3 +228,18 @@ class ScorerTests(TestCase):
         result = score_resume(sections, "Required: Python, Django")
         self.assertEqual(result["required_matched"], ["python"])
         self.assertEqual(result["required_missing"], ["django"])
+
+class DocxTests(TestCase):
+    def test_docx_text_and_table_are_extracted(self):
+        doc = WordDocument()
+        doc.add_paragraph("Built a tracker using Python")
+        table = doc.add_table(rows=1, cols=1)
+        table.cell(0, 0).text = "Skills: SQL, Git"
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        buffer.name = "resume.docx"
+
+        text = extract_document_text(buffer)
+        self.assertIn("Built a tracker using Python", text)
+        self.assertIn("SQL, Git", text)        
