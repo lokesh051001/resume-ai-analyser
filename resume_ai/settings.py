@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "corsheaders",
     "analyser",
+    "rest_framework",
+    "applications",
 ]
 
 MIDDLEWARE = [

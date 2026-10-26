@@ -1,33 +1,24 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import UploadForm
 from .models import Analysis
-from .services.pdf_parser import extract_text
-from .services.section_parser import split_sections
-from .services.scorer import score_resume
-from django.http import HttpResponse
+from .services.analysis import analyse_upload
+
 
 def upload(request):
     form = UploadForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
-        f = form.cleaned_data["resume"]
-        job = form.cleaned_data["job_description"]
         try:
-            text = extract_text(f, two_column=form.cleaned_data["two_column"])
-        except Exception:
-            form.add_error("resume", "Could not read this PDF.")
+            analysis = analyse_upload(
+                form.cleaned_data["resume"],
+                form.cleaned_data["job_description"],
+                form.cleaned_data["two_column"],
+            )
+        except ValueError as e:
+            form.add_error("resume", str(e))
         else:
-            if not text:
-                form.add_error("resume", "No text found. This may be a scanned image (OCR needed).")
-            else:
-                result = score_resume(split_sections(text), job)
-                analysis = Analysis.objects.create(
-                    filename=f.name,
-                    job_description=job,
-                    score=result["score"],
-                    result=result,
-                )
-                return redirect("detail", pk=analysis.pk)
+            return redirect("detail", pk=analysis.pk)
     return render(request, "analyser/upload.html", {"form": form})
 
 
@@ -37,6 +28,7 @@ def history(request):
 
 def detail(request, pk):
     return render(request, "analyser/detail.html", {"a": get_object_or_404(Analysis, pk=pk)})
+
 
 def report(request, pk):
     a = get_object_or_404(Analysis, pk=pk)
@@ -53,6 +45,7 @@ def report(request, pk):
     lines += [f"  - {name}: {value}" for name, value in r["breakdown"].items()]
     lines += [
         "",
+        "Required skills matched: " + (", ".join(r.get("required_matched", [])) or "none"),
         "Required skills missing: " + (", ".join(r["required_missing"]) or "none"),
         "Preferred skills missing: " + (", ".join(r["preferred_missing"]) or "none"),
         "Listed but not demonstrated: " + (", ".join(r["not_demonstrated"]) or "none"),
