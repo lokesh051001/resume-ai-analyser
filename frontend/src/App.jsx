@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import Tracker from "./Tracker.jsx";
 
 const API = "http://127.0.0.1:8000/api";
 
@@ -122,7 +123,7 @@ function UploadForm({ onCreated }) {
     setError("");
     setSuggestionError("");
     setSuggestions(null);
-    if (!file) return setError("Please choose a PDF.");
+        if (!file) return setError("Please choose a PDF or DOCX file.");
 
     const body = new FormData();
     body.append("resume", file);
@@ -166,8 +167,7 @@ function UploadForm({ onCreated }) {
     <form onSubmit={handleSubmit} style={{ marginBottom: 32 }}>
       <h2>New analysis</h2>
       <p>
-        <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files[0])} />
-      </p>
+        <input type="file" accept=".pdf,.docx" onChange={(e) => setFile(e.target.files[0])} />      </p>
       <p>
         <textarea
           rows={6}
@@ -225,7 +225,7 @@ function UploadForm({ onCreated }) {
   );
 }
 
-export default function App() {
+function AnalyserPage(){
   const [analyses, setAnalyses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -256,6 +256,20 @@ export default function App() {
           <AnalysisCard key={a.id} a={a} weights={weights} />
         ))}
       </ul>
+    </div>
+  );
+}
+export default function App() {
+  const [tab, setTab] = useState("analyser");
+  const tabStyle = (name) => ({
+    padding: "6px 14px", marginRight: 8, border: "1px solid #ccc", borderRadius: 6, cursor: "pointer",
+    background: tab === name ? "#222" : "#fff", color: tab === name ? "#fff" : "#222",
+  });
+  return (
+    <div style={{ maxWidth: 900, margin: "1.5rem auto", fontFamily: "sans-serif" }}>
+      <button style={tabStyle("analyser")} onClick={() => setTab("analyser")}>Resume Analyser</button>
+      <button style={tabStyle("tracker")} onClick={() => setTab("tracker")}>Job Tracker</button>
+      {tab === "analyser" ? <AnalyserPage /> : <Tracker />}
     </div>
   );
 }
