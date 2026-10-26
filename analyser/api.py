@@ -1,3 +1,7 @@
+import logging
+
+from django.conf import settings
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -6,13 +10,10 @@ from django.views.decorators.http import require_GET, require_POST
 from .forms import UploadForm
 from .models import Analysis
 from .services.analysis import analyse_upload
-from .services.pdf_parser import extract_text
-from .services.section_parser import split_sections
+from .services.document_parser import extract_document_text
 from .services.scorer import score_resume
+from .services.section_parser import split_sections
 from .services.suggestions import SuggestionError, create_suggestions
-from django.conf import settings
-from django.core.cache import cache
-import logging
 
 
 def _serialize(a):
@@ -23,9 +24,12 @@ def _serialize(a):
         "created_at": a.created_at.isoformat(),
         "result": a.result,
     }
+
+
 @require_GET
 def health(request):
     return JsonResponse({"status": "ok", "message": "Resume analyser API is running"})
+
 
 @require_GET
 def analyses_list(request):
@@ -82,7 +86,9 @@ def suggestions(request):
         logging.exception("Rate limit cache unavailable")
 
     try:
-        sections = split_sections(extract_text(form.cleaned_data["resume"], form.cleaned_data["two_column"]))
+        sections = split_sections(
+            extract_document_text(form.cleaned_data["resume"], form.cleaned_data["two_column"])
+        )
         score = score_resume(sections, form.cleaned_data["job_description"])
         result = create_suggestions(
             sections,

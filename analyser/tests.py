@@ -138,7 +138,7 @@ class SuggestionViewTests(TestCase):
     def setUp(self):
         cache.clear()
         patches = {
-            "extract": patch("analyser.api.extract_text", return_value="Projects\nBuilt a tracker using Python"),
+            "extract": patch("analyser.api.extract_document_text", return_value="Projects\nBuilt a tracker using Python"),
             "score": patch("analyser.api.score_resume", return_value={
                 "required_missing": ["docker"], "preferred_missing": [], "not_demonstrated": ["git"]}),
             "suggest": patch("analyser.api.create_suggestions", return_value={
@@ -242,4 +242,24 @@ class DocxTests(TestCase):
 
         text = extract_document_text(buffer)
         self.assertIn("Built a tracker using Python", text)
-        self.assertIn("SQL, Git", text)        
+        self.assertIn("SQL, Git", text)     
+
+@patch("analyser.services.scorer.match_requirements", return_value=[])
+class DocxUploadTests(TestCase):
+    def test_docx_upload_is_accepted_and_scored(self, _):
+        doc = WordDocument()
+        doc.add_paragraph("Skills")
+        doc.add_paragraph("Python, SQL")
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        upload = SimpleUploadedFile("resume.docx", buffer.getvalue())
+        response = self.client.post(
+            "/api/analyse/", {"resume": upload, "job_description": "Required: Python"}
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["result"]["required_matched"], ["python"])
+
+    def test_other_file_types_are_rejected(self, _):
+        upload = SimpleUploadedFile("notes.txt", b"hello")
+        response = self.client.post("/api/analyse/", {"resume": upload, "job_description": "Python"})
+        self.assertEqual(response.status_code, 400)           
