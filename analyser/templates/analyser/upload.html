@@ -1,7 +1,0 @@
-<h1>Resume Analyser</h1>
-<form method="post" enctype="multipart/form-data">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Analyse</button>
-</form>
-<a href="{% url 'history' %}">Past analyses</a>

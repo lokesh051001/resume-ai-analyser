@@ -4,7 +4,7 @@ from .scorer import score_resume
 from ..models import Analysis
 
 
-def analyse_upload(file, job_description, two_column=False) -> Analysis:
+def analyse_upload(file, job_description, two_column=False, owner=None, application=None) -> Analysis:
     """Run the full pipeline and save the result. Raises ValueError with a user-friendly message."""
     try:
         text = extract_document_text(file, two_column=two_column)
@@ -15,6 +15,8 @@ def analyse_upload(file, job_description, two_column=False) -> Analysis:
 
     result = score_resume(split_sections(text), job_description)
     return Analysis.objects.create(
+        owner=owner,
+        application=application,
         filename=file.name,
         job_description=job_description,
         score=result["score"],

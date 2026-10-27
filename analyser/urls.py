@@ -1,14 +1,12 @@
 from django.urls import path
-from . import views, api
+
+from . import api
 
 urlpatterns = [
-    path("", views.upload, name="upload"),
-    path("history/", views.history, name="history"),
-    path("analysis/<int:pk>/", views.detail, name="detail"),
-    path("analysis/<int:pk>/report/", views.report, name="report"),
+    path("api/health/", api.health),
     path("api/analyses/", api.analyses_list),
     path("api/analyses/<int:pk>/", api.analysis_detail),
+    path("api/analyses/<int:pk>/report/", api.analysis_report),
     path("api/analyse/", api.analyse),
     path("api/suggestions/", api.suggestions),
-    path("api/health/", api.health),
 ]

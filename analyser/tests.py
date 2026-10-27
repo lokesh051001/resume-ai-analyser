@@ -3,21 +3,23 @@ import json
 import urllib.error
 from unittest.mock import MagicMock, patch
 
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from analyser.services.section_parser import split_sections
-
-from analyser.services.suggestions import SuggestionError, create_suggestions
-from analyser.services.scorer import score_resume
-
-import io
 from docx import Document as WordDocument
-from analyser.services.document_parser import extract_document_text
+from rest_framework.test import APITestCase
 
+from analyser.models import Analysis
+from analyser.services.document_parser import extract_document_text
+from analyser.services.scorer import score_resume
+from analyser.services.section_parser import split_sections
+from analyser.services.suggestions import SuggestionError, create_suggestions
+from applications.models import JobApplication
 
 FAKE_KEY = "test-key-not-real"
-SUGGEST_URL = "/api/suggestions/"  # check analyser/urls.py
+SUGGEST_URL = "/api/suggestions/"
+PASSWORD = "S3cure-pass-xyz"
 
 LINES = [
     "Built a student attendance tracker using Python and SQLite",
@@ -55,6 +57,32 @@ def suggestions_response(*items):
 def http_error(code, message):
     body = json.dumps({"error": {"message": message}}).encode()
     return urllib.error.HTTPError("https://example.invalid", code, "error", {}, io.BytesIO(body))
+
+
+def _docx_bytes(text="Skills\nPython"):
+    doc = WordDocument()
+    for line in text.split("\n"):
+        doc.add_paragraph(line)
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+def _make_analysis(owner, application=None):
+    return Analysis.objects.create(
+        owner=owner, application=application, filename="r.docx", job_description="Python", score=50.0,
+        result={"score": 50.0, "breakdown": {}, "required_matched": [], "required_missing": [],
+                "preferred_missing": [], "not_demonstrated": []},
+    )
+
+
+class AuthedTestCase(APITestCase):
+    """Base class: every test starts logged in as a normal user."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = get_user_model().objects.create_user("tester", password=PASSWORD)
+        self.client.force_authenticate(self.user)
 
 
 @override_settings(CLAUDE_SUGGESTIONS_ENABLED=True, ANTHROPIC_API_KEY=FAKE_KEY, ANTHROPIC_MODEL="test-model")
@@ -134,8 +162,9 @@ class SuggestionServiceTests(TestCase):
 
 
 @override_settings(CLAUDE_SUGGESTIONS_ENABLED=True, ANTHROPIC_API_KEY=FAKE_KEY)
-class SuggestionViewTests(TestCase):
+class SuggestionViewTests(AuthedTestCase):
     def setUp(self):
+        super().setUp()
         cache.clear()
         patches = {
             "extract": patch("analyser.api.extract_document_text", return_value="Projects\nBuilt a tracker using Python"),
@@ -189,7 +218,8 @@ class SuggestionViewTests(TestCase):
     def test_invalid_upload_does_not_use_rate_limit(self):
         for _ in range(6):
             self.assertEqual(self.post(filename="notes.txt").status_code, 400)
-        self.assertEqual(self.post().status_code, 200)    
+        self.assertEqual(self.post().status_code, 200)
+
 
 class SectionParserTests(TestCase):
     def test_personal_details_are_separated(self):
@@ -202,10 +232,10 @@ class SectionParserTests(TestCase):
         self.assertIn("personal", sections)
         self.assertIn("Fathers Name", sections["personal"])
         self.assertNotIn("Fathers Name", sections["certifications"])
-        self.assertNotIn("College events", sections["certifications"])    
+        self.assertNotIn("College events", sections["certifications"])
 
 
-class ApiBasicsTests(TestCase):
+class ApiBasicsTests(AuthedTestCase):
     def test_health(self):
         response = self.client.get("/api/health/")
         self.assertEqual(response.status_code, 200)
@@ -229,6 +259,7 @@ class ScorerTests(TestCase):
         self.assertEqual(result["required_matched"], ["python"])
         self.assertEqual(result["required_missing"], ["django"])
 
+
 class DocxTests(TestCase):
     def test_docx_text_and_table_are_extracted(self):
         doc = WordDocument()
@@ -242,17 +273,13 @@ class DocxTests(TestCase):
 
         text = extract_document_text(buffer)
         self.assertIn("Built a tracker using Python", text)
-        self.assertIn("SQL, Git", text)     
+        self.assertIn("SQL, Git", text)
+
 
 @patch("analyser.services.scorer.match_requirements", return_value=[])
-class DocxUploadTests(TestCase):
+class DocxUploadTests(AuthedTestCase):
     def test_docx_upload_is_accepted_and_scored(self, _):
-        doc = WordDocument()
-        doc.add_paragraph("Skills")
-        doc.add_paragraph("Python, SQL")
-        buffer = io.BytesIO()
-        doc.save(buffer)
-        upload = SimpleUploadedFile("resume.docx", buffer.getvalue())
+        upload = SimpleUploadedFile("resume.docx", _docx_bytes())
         response = self.client.post(
             "/api/analyse/", {"resume": upload, "job_description": "Required: Python"}
         )
@@ -262,4 +289,52 @@ class DocxUploadTests(TestCase):
     def test_other_file_types_are_rejected(self, _):
         upload = SimpleUploadedFile("notes.txt", b"hello")
         response = self.client.post("/api/analyse/", {"resume": upload, "job_description": "Python"})
-        self.assertEqual(response.status_code, 400)           
+        self.assertEqual(response.status_code, 400)
+
+
+class AnalysisOwnershipTests(AuthedTestCase):
+    def setUp(self):
+        super().setUp()
+        self.bob = get_user_model().objects.create_user("bob", password=PASSWORD)
+
+    def test_login_required(self):
+        a = _make_analysis(self.user)
+        self.client.force_authenticate(None)
+        for url in ("/api/analyses/", f"/api/analyses/{a.pk}/", f"/api/analyses/{a.pk}/report/"):
+            self.assertEqual(self.client.get(url).status_code, 401)
+        self.assertEqual(self.client.post("/api/analyse/").status_code, 401)
+
+    def test_users_only_see_their_own_analyses(self):
+        mine = _make_analysis(self.user)
+        theirs = _make_analysis(self.bob)
+        ids = [a["id"] for a in self.client.get("/api/analyses/").json()["analyses"]]
+        self.assertEqual(ids, [mine.pk])
+        self.assertEqual(self.client.get(f"/api/analyses/{theirs.pk}/").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/analyses/{theirs.pk}/report/").status_code, 404)
+
+    @patch("analyser.services.scorer.match_requirements", return_value=[])
+    def test_upload_links_to_application_and_uses_its_job_description(self, _):
+        app = JobApplication.objects.create(
+            owner=self.user, company="Example", role="Dev", job_description="Required: Python"
+        )
+        upload = SimpleUploadedFile("resume.docx", _docx_bytes())
+        response = self.client.post("/api/analyse/", {"resume": upload, "application": app.pk})
+        self.assertEqual(response.status_code, 201)
+        saved = Analysis.objects.get(pk=response.json()["id"])
+        self.assertEqual(saved.application, app)
+        self.assertEqual(saved.owner, self.user)
+        self.assertEqual(saved.result["required_matched"], ["python"])
+
+    @patch("analyser.services.scorer.match_requirements", return_value=[])
+    def test_cannot_link_to_another_users_application(self, _):
+        theirs = JobApplication.objects.create(owner=self.bob, company="Other", role="Dev", job_description="Python")
+        upload = SimpleUploadedFile("resume.docx", _docx_bytes())
+        response = self.client.post("/api/analyse/", {"resume": upload, "application": theirs.pk})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(Analysis.objects.count(), 0)
+
+    def test_application_list_shows_latest_analysis_score(self):
+        app = JobApplication.objects.create(owner=self.user, company="Example", role="Dev")
+        _make_analysis(self.user, application=app)
+        row = self.client.get("/api/applications/").json()[0]
+        self.assertEqual(row["latest_analysis"]["score"], 50.0)

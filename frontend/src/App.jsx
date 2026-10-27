@@ -3,7 +3,7 @@ import Tracker from "./Tracker.jsx";
 import Login from "./Login.jsx";
 import { getSession, saveSession, clearSession, authFetch } from "./auth.js";
 
-const API = "http://127.0.0.1:8000/api";
+// const API = "http://127.0.0.1:8000/api";
 
 const DEFAULT_WEIGHTS = {
   required_skills: 40,
@@ -59,6 +59,16 @@ function WeightSliders({ weights, onChange }) {
     </div>
   );
 }
+async function downloadReport(a) {
+  const res = await authFetch(`/analyses/${a.id}/report/`);
+  if (!res.ok) return;
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `report_${a.id}.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 function AnalysisCard({ a, weights }) {
   const r = a.result;
@@ -106,6 +116,7 @@ function AnalysisCard({ a, weights }) {
           </div>
         </details>
       )}
+            <button style={{ marginTop: 6 }} onClick={() => downloadReport(a)}>Download report</button>
     </li>
   );
 }
@@ -135,7 +146,7 @@ function UploadForm({ onCreated }) {
     setBusy(true);
     try {
       // No Content-Type header: the browser adds it, including the multipart boundary.
-      const res = await fetch(`${API}/analyse/`, { method: "POST", body });
+      const res = await authFetch("/analyse/",{ method: "POST", body });
       const data = await res.json();
       if (!res.ok) {
         const messages = Object.values(data.errors || {}).flat();
@@ -148,7 +159,7 @@ function UploadForm({ onCreated }) {
         suggestionBody.append("job_description", job);
         if (twoColumn) suggestionBody.append("two_column", "true");
         try {
-          const suggestionRes = await fetch(`${API}/suggestions/`, { method: "POST", body: suggestionBody });
+          const suggestionRes = await authFetch("/suggestions/", { method: "POST", body: suggestionBody });
           const suggestionData = await suggestionRes.json();
           if (!suggestionRes.ok) throw new Error(suggestionData.error || "Could not generate suggestions.");
           setSuggestions(suggestionData);
@@ -234,7 +245,7 @@ function AnalyserPage(){
   const [weights, setWeights] = useState(DEFAULT_WEIGHTS);
 
   useEffect(() => {
-    fetch(`${API}/analyses/`)
+    authFetch("/analyses/")
       .then((res) => {
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         return res.json();
@@ -310,12 +321,12 @@ export default function App() {
           </div>
         )}
       </div>
-      {tab === "analyser" ? (
-        <AnalyserPage />
-      ) : session ? (
-        <Tracker />
-      ) : (
+            {!session ? (
         <Login onLoggedIn={(s) => { saveSession(s); setSession(s); }} />
+      ) : tab === "analyser" ? (
+        <AnalyserPage />
+      ) : (
+        <Tracker />
       )}
     </div>
   );

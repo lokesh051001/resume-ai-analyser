@@ -1,7 +1,16 @@
+from django.conf import settings
 from django.db import models
 
 
 class Analysis(models.Model):
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="analyses", null=True, blank=True,
+    )
+    application = models.ForeignKey(
+        "applications.JobApplication", on_delete=models.SET_NULL,
+        related_name="analyses", null=True, blank=True,
+    )
     filename = models.CharField(max_length=255)
     job_description = models.TextField()
     score = models.FloatField()

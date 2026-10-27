@@ -15,7 +15,7 @@ class JobApplicationViewSet(viewsets.ModelViewSet):
         queryset = JobApplication.objects.filter(owner=self.request.user)
         status = self.request.query_params.get("status")
         if status:
-            queryset = queryset.filter(status=status)
+                    queryset = JobApplication.objects.filter(owner=self.request.user).prefetch_related("analyses")
         return queryset
 
     def perform_create(self, serializer):

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { authFetch } from "./auth.js";
 
-
 const API = "/applications/";
 const STATUSES = ["saved", "applied", "assessment", "interview", "offer", "rejected", "withdrawn"];
 const EMPTY = {
@@ -97,6 +96,8 @@ export default function Tracker() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null); // null = closed, {} = new, item = edit
+  const [message, setMessage] = useState("");
+  const [twoColumn, setTwoColumn] = useState(false);
 
   const load = useCallback(async () => {
     const params = new URLSearchParams();
@@ -133,6 +134,30 @@ export default function Tracker() {
     load();
   }
 
+  async function runAnalysis(item, file) {
+    if (!file) return;
+    if (!item.job_description.trim()) {
+      setMessage(`Add a job description to "${item.role}" first (use Edit).`);
+      return;
+    }
+    setMessage(`Analysing your resume for ${item.company}...`);
+    const body = new FormData();
+    body.append("resume", file);
+    body.append("application", String(item.id));
+    if (twoColumn) body.append("two_column", "true");
+    try {
+      const res = await authFetch("/analyse/", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(Object.values(data.errors || {}).flat().join(" ") || `Server returned ${res.status}`);
+      }
+      setMessage(`Match for ${item.company}: ${data.score}/100`);
+      load();
+    } catch (err) {
+      setMessage(`Analysis failed: ${err.message}`);
+    }
+  }
+
   const cell = { padding: "6px 8px", borderBottom: "1px solid #eee", textAlign: "left" };
   return (
     <div>
@@ -151,8 +176,12 @@ export default function Tracker() {
           <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>{" "}
-        <input placeholder="Search company or role" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input placeholder="Search company or role" value={search} onChange={(e) => setSearch(e.target.value)} />{" "}
+        <label>
+          <input type="checkbox" checked={twoColumn} onChange={(e) => setTwoColumn(e.target.checked)} /> PDF has two columns
+        </label>
       </p>
+      {message && <p style={{ fontSize: 14 }}>{message}</p>}
       {loading && <p>Loading...</p>}
       {error && <p style={{ color: "#d9534f" }}>Could not load applications: {error}</p>}
       {!loading && !error && items.length === 0 && <p>No applications found.</p>}
@@ -162,7 +191,7 @@ export default function Tracker() {
             <thead>
               <tr>
                 <th style={cell}>Company</th><th style={cell}>Role</th><th style={cell}>Status</th>
-                <th style={cell}>Applied</th><th style={cell}>Interview</th><th style={cell}></th>
+                <th style={cell}>Applied</th><th style={cell}>Interview</th><th style={cell}>Match</th><th style={cell}></th>
               </tr>
             </thead>
             <tbody>
@@ -177,7 +206,21 @@ export default function Tracker() {
                   </td>
                   <td style={cell}>{item.applied_date ?? "-"}</td>
                   <td style={cell}>{item.interview_date ? item.interview_date.slice(0, 16).replace("T", " ") : "-"}</td>
+                  <td style={cell}>{item.latest_analysis ? `${item.latest_analysis.score}/100` : "-"}</td>
                   <td style={cell}>
+                    <label style={{ cursor: "pointer", textDecoration: "underline" }}>
+                      Analyse
+                      <input
+                        type="file"
+                        accept=".pdf,.docx"
+                        hidden
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          e.target.value = "";
+                          runAnalysis(item, file);
+                        }}
+                      />
+                    </label>{" "}
                     <button onClick={() => setEditing(item)}>Edit</button>{" "}
                     <button onClick={() => remove(item)}>Delete</button>
                   </td>

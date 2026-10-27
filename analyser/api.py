@@ -2,10 +2,13 @@ import logging
 
 from django.conf import settings
 from django.core.cache import cache
-from django.http import JsonResponse
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
+from applications.models import JobApplication
 
 from .forms import UploadForm
 from .models import Analysis
@@ -22,65 +25,119 @@ def _serialize(a):
         "filename": a.filename,
         "score": a.score,
         "created_at": a.created_at.isoformat(),
+        "application": a.application_id,
         "result": a.result,
     }
 
 
-@require_GET
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def health(request):
-    return JsonResponse({"status": "ok", "message": "Resume analyser API is running"})
+    return Response({"status": "ok", "message": "Resume analyser API is running"})
 
 
-@require_GET
+@api_view(["GET"])
 def analyses_list(request):
-    return JsonResponse({"analyses": [_serialize(a) for a in Analysis.objects.all()]})
+    queryset = Analysis.objects.filter(owner=request.user)
+    application = request.query_params.get("application")
+    if application and application.isdigit():
+        queryset = queryset.filter(application_id=int(application))
+    return Response({"analyses": [_serialize(a) for a in queryset]})
 
 
-@require_GET
+@api_view(["GET"])
 def analysis_detail(request, pk):
-    return JsonResponse(_serialize(get_object_or_404(Analysis, pk=pk)))
+    return Response(_serialize(get_object_or_404(Analysis, pk=pk, owner=request.user)))
 
 
-@csrf_exempt  # fine for local learning; revisit when we add login
-@require_POST
+@api_view(["GET"])
+def analysis_report(request, pk):
+    a = get_object_or_404(Analysis, pk=pk, owner=request.user)
+    r = a.result
+    lines = [
+        "RESUME ANALYSIS REPORT",
+        "=" * 30,
+        f"File: {a.filename}",
+        f"Date: {a.created_at:%Y-%m-%d %H:%M}",
+        f"Overall score: {a.score}/100",
+        "",
+        "Score breakdown:",
+    ]
+    lines += [f"  - {name}: {value}" for name, value in r["breakdown"].items()]
+    lines += [
+        "",
+        "Required skills matched: " + (", ".join(r.get("required_matched", [])) or "none"),
+        "Required skills missing: " + (", ".join(r["required_missing"]) or "none"),
+        "Preferred skills missing: " + (", ".join(r["preferred_missing"]) or "none"),
+        "Listed but not demonstrated: " + (", ".join(r["not_demonstrated"]) or "none"),
+    ]
+    response = HttpResponse("\n".join(lines), content_type="text/plain")
+    response["Content-Disposition"] = f'attachment; filename="report_{a.pk}.txt"'
+    return response
+
+
+def _linked_application(request):
+    """Return (application, error_response). The application must belong to the logged-in user."""
+    app_id = request.POST.get("application")
+    if not app_id:
+        return None, None
+    if not app_id.isdigit():
+        return None, Response({"errors": {"application": ["Invalid application."]}}, status=400)
+    application = JobApplication.objects.filter(owner=request.user, pk=int(app_id)).first()
+    if application is None:
+        return None, Response({"errors": {"application": ["Application not found."]}}, status=404)
+    return application, None
+
+
+@api_view(["POST"])
 def analyse(request):
-    form = UploadForm(request.POST, request.FILES)
+    application, error = _linked_application(request)
+    if error:
+        return error
+
+    data = request.POST.copy()
+    if application and not data.get("job_description", "").strip():
+        data["job_description"] = application.job_description
+
+    form = UploadForm(data, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"errors": {k: list(v) for k, v in form.errors.items()}}, status=400)
+        return Response({"errors": {k: list(v) for k, v in form.errors.items()}}, status=400)
     try:
         a = analyse_upload(
             form.cleaned_data["resume"],
             form.cleaned_data["job_description"],
             form.cleaned_data["two_column"],
+            owner=request.user,
+            application=application,
         )
     except ValueError as e:
-        return JsonResponse({"errors": {"resume": [str(e)]}}, status=400)
-    return JsonResponse(_serialize(a), status=201)
+        return Response({"errors": {"resume": [str(e)]}}, status=400)
+    return Response(_serialize(a), status=201)
 
 
-@csrf_exempt
-@require_POST
+@api_view(["POST"])
 def suggestions(request):
     origin = request.headers.get("Origin")
     if origin and origin not in settings.CORS_ALLOWED_ORIGINS:
-        return JsonResponse({"error": "Request origin is not allowed."}, status=403)
+        return Response({"error": "Request origin is not allowed."}, status=403)
     if not settings.CLAUDE_SUGGESTIONS_ENABLED or not settings.ANTHROPIC_API_KEY:
-        return JsonResponse(
+        return Response(
             {"error": "AI suggestions are disabled. Configure the Claude API key and enable the feature in .env."},
             status=503,
         )
 
     form = UploadForm(request.POST, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"errors": {k: list(v) for k, v in form.errors.items()}}, status=400)
+        return Response({"errors": {k: list(v) for k, v in form.errors.items()}}, status=400)
 
-    # Five valid requests per client address per hour. Cache storage can be
-    # replaced with a shared backend when deploying more than one worker.
-    key = f"claude-suggestions:{request.META.get('REMOTE_ADDR', 'unknown')}"
+    # Five valid requests per user per hour. Cache storage can be replaced
+    # with a shared backend when deploying more than one worker.
+    key = f"claude-suggestions:{request.user.pk}"
     try:
         count = cache.get(key, 0)
         if count >= 5:
-            return JsonResponse({"error": "Suggestion limit reached. Try again in an hour."}, status=429)
+            return Response({"error": "Suggestion limit reached. Try again in an hour."}, status=429)
         cache.set(key, count + 1, timeout=3600)
     except Exception:
         logging.exception("Rate limit cache unavailable")
@@ -95,12 +152,12 @@ def suggestions(request):
             score["required_missing"] + score["preferred_missing"],
             score["not_demonstrated"],
         )
-        return JsonResponse(result)
+        return Response(result)
     except SuggestionError as e:
-        return JsonResponse({"error": str(e)}, status=502)
+        return Response({"error": str(e)}, status=502)
     except Exception:
         logging.exception("Suggestion preparation failed")
-        return JsonResponse(
+        return Response(
             {"error": "Could not prepare suggestions. Your analysis is still available."},
             status=500,
         )
