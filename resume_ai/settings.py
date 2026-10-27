@@ -55,6 +55,8 @@ INSTALLED_APPS = [
     "analyser",
     "rest_framework",
     "applications",
+    "rest_framework.authtoken",
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -150,3 +152,9 @@ CORS_ALLOWED_ORIGINS = [
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 CLAUDE_SUGGESTIONS_ENABLED = os.environ.get("CLAUDE_SUGGESTIONS_ENABLED", "false").lower() == "true"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_THROTTLE_RATES": {"anon": "20/min"},
+}

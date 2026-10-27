@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -11,6 +12,11 @@ class JobApplication(models.Model):
         REJECTED = "rejected", "Rejected"
         WITHDRAWN = "withdrawn", "Withdrawn"
 
+    # null=True only so rows created before login existed can survive the migration.
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="applications", null=True, blank=True,
+    )
     company = models.CharField(max_length=200)
     role = models.CharField(max_length=200)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SAVED)

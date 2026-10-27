@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { authFetch } from "./auth.js";
 
-const API = "http://127.0.0.1:8000/api/applications/";
+
+const API = "/applications/";
 const STATUSES = ["saved", "applied", "assessment", "interview", "offer", "rejected", "withdrawn"];
 const EMPTY = {
   company: "", role: "", status: "saved", applied_date: "",
@@ -38,7 +40,7 @@ function TrackerForm({ initial, onSaved, onCancel }) {
     setError("");
     setBusy(true);
     try {
-      const res = await fetch(editing ? `${API}${initial.id}/` : API, {
+      const res = await authFetch(editing ? `${API}${initial.id}/` : API, {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(toPayload(form)),
@@ -101,7 +103,7 @@ export default function Tracker() {
     if (status) params.set("status", status);
     if (search) params.set("search", search);
     try {
-      const res = await fetch(`${API}?${params}`);
+      const res = await authFetch(`${API}?${params}`);
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       setItems(await res.json());
       setError("");
@@ -117,7 +119,7 @@ export default function Tracker() {
   }, [load]);
 
   async function changeStatus(item, next) {
-    await fetch(`${API}${item.id}/`, {
+    await authFetch(`${API}${item.id}/`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: next }),
@@ -127,7 +129,7 @@ export default function Tracker() {
 
   async function remove(item) {
     if (!window.confirm(`Delete "${item.role}" at ${item.company}?`)) return;
-    await fetch(`${API}${item.id}/`, { method: "DELETE" });
+    await authFetch(`${API}${item.id}/`, { method: "DELETE" });
     load();
   }
 

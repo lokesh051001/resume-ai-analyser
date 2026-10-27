@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import Tracker from "./Tracker.jsx";
+import Login from "./Login.jsx";
+import { getSession, saveSession, clearSession, authFetch } from "./auth.js";
 
 const API = "http://127.0.0.1:8000/api";
 
@@ -259,17 +261,62 @@ function AnalyserPage(){
     </div>
   );
 }
+// export default function App() {
+//   const [tab, setTab] = useState("analyser");
+//   const tabStyle = (name) => ({
+//     padding: "6px 14px", marginRight: 8, border: "1px solid #ccc", borderRadius: 6, cursor: "pointer",
+//     background: tab === name ? "#222" : "#fff", color: tab === name ? "#fff" : "#222",
+//   });
+//   return (
+//     <div style={{ maxWidth: 900, margin: "1.5rem auto", fontFamily: "sans-serif" }}>
+//       <button style={tabStyle("analyser")} onClick={() => setTab("analyser")}>Resume Analyser</button>
+//       <button style={tabStyle("tracker")} onClick={() => setTab("tracker")}>Job Tracker</button>
+//       {tab === "analyser" ? <AnalyserPage /> : <Tracker />}
+//     </div>
+//   );
+// }
+
 export default function App() {
   const [tab, setTab] = useState("analyser");
+  const [session, setSession] = useState(getSession());
+
+  useEffect(() => {
+    const onExpired = () => setSession(null);
+    window.addEventListener("auth-expired", onExpired);
+    return () => window.removeEventListener("auth-expired", onExpired);
+  }, []);
+
+  async function logout() {
+    await authFetch("/auth/logout/", { method: "POST" }).catch(() => {});
+    clearSession();
+    setSession(null);
+  }
+
   const tabStyle = (name) => ({
     padding: "6px 14px", marginRight: 8, border: "1px solid #ccc", borderRadius: 6, cursor: "pointer",
     background: tab === name ? "#222" : "#fff", color: tab === name ? "#fff" : "#222",
   });
+
   return (
     <div style={{ maxWidth: 900, margin: "1.5rem auto", fontFamily: "sans-serif" }}>
-      <button style={tabStyle("analyser")} onClick={() => setTab("analyser")}>Resume Analyser</button>
-      <button style={tabStyle("tracker")} onClick={() => setTab("tracker")}>Job Tracker</button>
-      {tab === "analyser" ? <AnalyserPage /> : <Tracker />}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <button style={tabStyle("analyser")} onClick={() => setTab("analyser")}>Resume Analyser</button>
+          <button style={tabStyle("tracker")} onClick={() => setTab("tracker")}>Job Tracker</button>
+        </div>
+        {session && (
+          <div style={{ fontSize: 14 }}>
+            Signed in as <b>{session.username}</b> <button onClick={logout}>Log out</button>
+          </div>
+        )}
+      </div>
+      {tab === "analyser" ? (
+        <AnalyserPage />
+      ) : session ? (
+        <Tracker />
+      ) : (
+        <Login onLoggedIn={(s) => { saveSession(s); setSession(s); }} />
+      )}
     </div>
   );
 }
