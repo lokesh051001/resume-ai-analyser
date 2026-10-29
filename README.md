@@ -18,6 +18,13 @@ Django REST API, React frontend, local semantic matching, and optional Claude wo
 - **Optional AI suggestions:** off by default. Rewords existing lines only, and rejects output
   that adds numbers or skills not in the original line.
 
+## Screenshots
+
+![Analyser result](docs/images/analyser.png)
+![Job tracker](docs/images/tracker.png)
+![Dashboard](docs/images/dashboard.png)
+
+
 ## Tech stack
 
 | Layer | Technology |
