@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import Tracker from "./Tracker.jsx";
 import Login from "./Login.jsx";
+import Dashboard from "./Dashboard.jsx";
 import { getSession, saveSession, clearSession, authFetch } from "./auth.js";
-
-// const API = "http://127.0.0.1:8000/api";
 
 const DEFAULT_WEIGHTS = {
   required_skills: 40,
@@ -59,6 +58,7 @@ function WeightSliders({ weights, onChange }) {
     </div>
   );
 }
+
 async function downloadReport(a) {
   const res = await authFetch(`/analyses/${a.id}/report/`);
   if (!res.ok) return;
@@ -86,6 +86,11 @@ function AnalysisCard({ a, weights }) {
       <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
         {Object.entries(r.breakdown).map(([k, v]) => `${k}: ${v}`).join(" · ")}
       </div>
+      {r.required_matched && (
+        <div style={{ fontSize: 13, color: "#555" }}>
+          Required matched: {r.required_matched.join(", ") || "none"}
+        </div>
+      )}
       <div style={{ fontSize: 13, color: "#555" }}>
         Required missing: {r.required_missing.join(", ") || "none"}
       </div>
@@ -116,7 +121,9 @@ function AnalysisCard({ a, weights }) {
           </div>
         </details>
       )}
-            <button style={{ marginTop: 6 }} onClick={() => downloadReport(a)}>Download report</button>
+      <button style={{ marginTop: 6 }} onClick={() => downloadReport(a)}>
+        Download report
+      </button>
     </li>
   );
 }
@@ -133,10 +140,11 @@ function UploadForm({ onCreated }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const form = e.target;
     setError("");
     setSuggestionError("");
     setSuggestions(null);
-        if (!file) return setError("Please choose a PDF or DOCX file.");
+    if (!file) return setError("Please choose a PDF or DOCX file.");
 
     const body = new FormData();
     body.append("resume", file);
@@ -146,7 +154,7 @@ function UploadForm({ onCreated }) {
     setBusy(true);
     try {
       // No Content-Type header: the browser adds it, including the multipart boundary.
-      const res = await authFetch("/analyse/",{ method: "POST", body });
+      const res = await authFetch("/analyse/", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) {
         const messages = Object.values(data.errors || {}).flat();
@@ -168,7 +176,7 @@ function UploadForm({ onCreated }) {
         }
       }
       setFile(null);
-      e.target.reset();
+      form.reset();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -180,7 +188,8 @@ function UploadForm({ onCreated }) {
     <form onSubmit={handleSubmit} style={{ marginBottom: 32 }}>
       <h2>New analysis</h2>
       <p>
-        <input type="file" accept=".pdf,.docx" onChange={(e) => setFile(e.target.files[0])} />      </p>
+        <input type="file" accept=".pdf,.docx" onChange={(e) => setFile(e.target.files[0])} />
+      </p>
       <p>
         <textarea
           rows={6}
@@ -196,7 +205,7 @@ function UploadForm({ onCreated }) {
           checked={twoColumn}
           onChange={(e) => setTwoColumn(e.target.checked)}
         />{" "}
-        Resume has two columns
+        PDF has two columns
       </label>
       <p>
         <label>
@@ -209,7 +218,7 @@ function UploadForm({ onCreated }) {
         </label>
       </p>
       <p style={{ color: "#666", fontSize: 13 }}>
-        Optional. Suggestions are requested only when selected. The PDF is not saved by this feature;
+        Optional. Suggestions are requested only when selected. The file is not saved by this feature;
         experience, project, and summary text is sent to Anthropic for this request.
       </p>
       <p>
@@ -238,7 +247,7 @@ function UploadForm({ onCreated }) {
   );
 }
 
-function AnalyserPage(){
+function AnalyserPage() {
   const [analyses, setAnalyses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -272,20 +281,6 @@ function AnalyserPage(){
     </div>
   );
 }
-// export default function App() {
-//   const [tab, setTab] = useState("analyser");
-//   const tabStyle = (name) => ({
-//     padding: "6px 14px", marginRight: 8, border: "1px solid #ccc", borderRadius: 6, cursor: "pointer",
-//     background: tab === name ? "#222" : "#fff", color: tab === name ? "#fff" : "#222",
-//   });
-//   return (
-//     <div style={{ maxWidth: 900, margin: "1.5rem auto", fontFamily: "sans-serif" }}>
-//       <button style={tabStyle("analyser")} onClick={() => setTab("analyser")}>Resume Analyser</button>
-//       <button style={tabStyle("tracker")} onClick={() => setTab("tracker")}>Job Tracker</button>
-//       {tab === "analyser" ? <AnalyserPage /> : <Tracker />}
-//     </div>
-//   );
-// }
 
 export default function App() {
   const [tab, setTab] = useState("analyser");
@@ -314,6 +309,7 @@ export default function App() {
         <div>
           <button style={tabStyle("analyser")} onClick={() => setTab("analyser")}>Resume Analyser</button>
           <button style={tabStyle("tracker")} onClick={() => setTab("tracker")}>Job Tracker</button>
+          <button style={tabStyle("dashboard")} onClick={() => setTab("dashboard")}>Dashboard</button>
         </div>
         {session && (
           <div style={{ fontSize: 14 }}>
@@ -321,12 +317,14 @@ export default function App() {
           </div>
         )}
       </div>
-            {!session ? (
+      {!session ? (
         <Login onLoggedIn={(s) => { saveSession(s); setSession(s); }} />
       ) : tab === "analyser" ? (
         <AnalyserPage />
-      ) : (
+      ) : tab === "tracker" ? (
         <Tracker />
+      ) : (
+        <Dashboard />
       )}
     </div>
   );
