@@ -34,12 +34,16 @@ if _env_file.exists():
 # SECURITY WARNING: keep the secret key used in production secret!
 
 
+DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or "dev-only-insecure-key"
+if not DEBUG and SECRET_KEY == "dev-only-insecure-key":
+    from django.core.exceptions import ImproperlyConfigured
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY when DJANGO_DEBUG is false.")
 
-ALLOWED_HOSTS = []
+# Comma-separated, for example "api.example.com,www.example.com". Empty is fine while DEBUG is true.
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
 
 
 # Application definition
@@ -137,11 +141,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+CORS_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if o.strip()
+]
+
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -158,3 +165,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_RATES": {"anon": "20/min"},
 }
+if not DEBUG:
+    # Production only: HTTPS, secure cookies, and no browsable HTML API.
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 3600
+    REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = ["rest_framework.renderers.JSONRenderer"]

@@ -11,8 +11,16 @@ class UploadForm(forms.Form):
 
     def clean_resume(self):
         f = self.cleaned_data["resume"]
-        if not f.name.lower().endswith(ALLOWED_EXTENSIONS):
+        name = f.name.lower()
+        if not name.endswith(ALLOWED_EXTENSIONS):
             raise forms.ValidationError("Please upload a PDF or DOCX file.")
         if f.size > MAX_UPLOAD_MB * 1024 * 1024:
             raise forms.ValidationError(f"File is too large. The limit is {MAX_UPLOAD_MB} MB.")
+
+        # Check the file's first bytes, not just its name. A DOCX is a zip file ("PK").
+        head = f.read(4)
+        f.seek(0)
+        expected = b"%PDF" if name.endswith(".pdf") else b"PK\x03\x04"
+        if not head.startswith(expected):
+            raise forms.ValidationError("This file is not a valid PDF or DOCX document.")
         return f

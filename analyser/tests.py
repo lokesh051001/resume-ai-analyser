@@ -247,6 +247,12 @@ class ApiBasicsTests(AuthedTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("too large", response.json()["errors"]["resume"][0])
 
+    def test_file_content_must_match_extension(self):
+        fake = SimpleUploadedFile("resume.pdf", b"this is not really a pdf")
+        response = self.client.post("/api/analyse/", {"resume": fake, "job_description": "Python"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not a valid", response.json()["errors"]["resume"][0])    
+
 
 @patch("analyser.services.scorer.match_requirements", return_value=[])
 class ScorerTests(TestCase):
