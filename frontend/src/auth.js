@@ -1,4 +1,4 @@
-const API_ROOT = "http://127.0.0.1:8000/api";
+const API_ROOT = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
 const TOKEN_KEY = "resume_ai_token";
 const USER_KEY = "resume_ai_user";
 
