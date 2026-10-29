@@ -64,7 +64,17 @@ copy .env.example .env
 python manage.py migrate
 python manage.py runserver
 ```
-
+or 
+```powershell
+git clone https://github.com/lokesh051001/resume-ai-analyser.git
+cd resume-ai-analyser
+python -m venv venv
+.\venv\Scripts\Activate
+pip install -r requirements.txt
+copy .env.example .env
+python manage.py migrate
+python manage.py runserver
+```
 Frontend, in a second terminal:
 
 ```powershell
